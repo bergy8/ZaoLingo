@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+ZaoLingo
 
-# Run and deploy your AI Studio app
+Read Zaobao. Understand every word.
+A Chinese reading app with instant pinyin and tap-to-translate.
 
-This contains everything you need to run your app locally.
+What is ZaoLingo?
+ZaoLingo is a standalone browser app for reading Chinese-language news from Zaobao.com.sg. Paste an article URL, and the full text is rendered on screen with pinyin above every character and English translations a tap away.
+It's designed for the Chinese learner who is past textbooks and ready to read real news — but still needs a safety net for unfamiliar vocabulary.
 
-View your app in AI Studio: https://ai.studio/apps/78723027-def0-46c4-8cbd-33a88da2f00d
+Features
+📖 Real Reading Experience
 
-## Run Locally
+Full Zaobao articles rendered beautifully on a single canvas
+Clean typographic layout with generous spacing — designed for sustained reading
+Paragraph structure and article flow preserved exactly as published
 
-**Prerequisites:**  Node.js
+🈶 Pinyin Annotation
+Pinyin rendered above every Chinese character, always in sync
+Accurate multi-character word segmentation — pinyin spans whole words, not individual characters
 
+🔍 Tap-to-Translate
+Tap any Chinese word to see its translation in the bottom panel
+Panel stays open while you read — tap another word to update it instantly
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+📱 Mobile-First
+Designed for one-handed reading on a phone
+
+ZaoLingo is not affiliated with Zaobao or Singapore Press Holdings.
+
