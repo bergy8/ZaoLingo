@@ -1,6 +1,6 @@
 ZaoLingo
 
-Read Zaobao. Understand every word.
+Read Zaobao articles. Understand every word.
 A Chinese reading app with instant pinyin and tap-to-translate.
 
 What is ZaoLingo?
