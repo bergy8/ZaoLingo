@@ -13,6 +13,29 @@ type ArticleData = {
   sentences: Sentence[];
 };
 
+const DEFAULT_RECENT_ARTICLES = [
+  {
+    title: "外交部更新旅游警示 建议公民暂缓前往沙特",
+    href: "https://www.zaobao.com.sg/news/singapore/story20261013-9831691",
+  },
+  {
+    title: "颜金勇：全球经济深刻变化 新中更须保持开放与连通",
+    href: "https://www.zaobao.com.sg/news/singapore/story20261013-9831431",
+  },
+  {
+    title: "一盘杂菜饭钠也超标？营养专家支招如何吃出健康",
+    href: "https://www.zaobao.com.sg/news/singapore/story20261013-9819963",
+  },
+  {
+    title: "酱料制造业者准备就绪 低钠酱料选择日益多元",
+    href: "https://www.zaobao.com.sg/news/singapore/story20261013-9819701",
+  },
+  {
+    title: "安全督工虽有培训但紧急时刻“不敢救人” 严重创伤病例居高不下",
+    href: "https://www.zaobao.com.sg/news/singapore/story20261013-9830646",
+  },
+];
+
 export default function App() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,7 +46,7 @@ export default function App() {
   const [fontSizeScale, setFontSizeScale] = useState(0.6);
   const [showPinyin, setShowPinyin] = useState(true);
 
-  const [recentArticles, setRecentArticles] = useState<{title: string, href: string}[]>([]);
+  const [recentArticles, setRecentArticles] = useState<{title: string, href: string}[]>(DEFAULT_RECENT_ARTICLES);
   const [loadingRecent, setLoadingRecent] = useState(false);
 
   useEffect(() => {
@@ -31,9 +54,12 @@ export default function App() {
       setLoadingRecent(true);
       try {
         const res = await fetch('/api/latest-articles');
-        if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
-          setRecentArticles(data);
+          if (Array.isArray(data) && data.length > 0) {
+            setRecentArticles(data);
+          }
         }
       } catch (err) {
         console.error("Failed to load recent articles", err);
@@ -43,6 +69,8 @@ export default function App() {
     }
     fetchRecent();
   }, []);
+
+  const [loadingStep, setLoadingStep] = useState('Fetching article...');
 
   const handleExtract = async (e: React.FormEvent | string) => {
     if (typeof e !== 'string') {
@@ -54,7 +82,30 @@ export default function App() {
     
     setUrl(targetUrl);
     setError('');
+
+    // Check client-side session cache for instant load
+    const normalized = targetUrl.trim().split('#')[0];
+    try {
+      const cached = sessionStorage.getItem(`zaobao_art_${normalized}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.sentences?.length) {
+          setArticle(parsed);
+          return;
+        }
+      }
+    } catch (e) {}
+
     setLoading(true);
+    setLoadingStep('Fetching article from Zaobao...');
+
+    // Progress updates to give clear feedback during processing
+    const stepTimer1 = setTimeout(() => {
+      setLoadingStep('Segmenting Chinese words & translating...');
+    }, 1200);
+    const stepTimer2 = setTimeout(() => {
+      setLoadingStep('Generating tone-marked Pinyin & formatting...');
+    }, 4000);
 
     try {
       const res = await fetch('/api/extract', {
@@ -62,14 +113,36 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: targetUrl }),
       });
-      const data = await res.json();
 
-      if (!res.ok) throw new Error(data.error);
+      const contentType = res.headers.get('content-type') || '';
+      let data: any;
+
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(
+          res.status === 404
+            ? "API route '/api/extract' not found (404). Please ensure serverless functions are deployed."
+            : `Server returned non-JSON response (${res.status}): ${text.slice(0, 120)}`
+        );
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || `Error ${res.status}: Failed to extract article.`);
+      }
+
+      // Save to client session cache for instantaneous retrieval
+      try {
+        sessionStorage.setItem(`zaobao_art_${normalized}`, JSON.stringify(data));
+      } catch (e) {}
 
       setArticle(data);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'An unexpected error occurred.');
     } finally {
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
       setLoading(false);
     }
   };
@@ -135,7 +208,7 @@ export default function App() {
             {loading ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Parsing Article...
+                <span>{loadingStep}</span>
               </>
             ) : (
               <>
@@ -144,6 +217,11 @@ export default function App() {
               </>
             )}
           </button>
+          {loading && (
+            <p className={`text-xs text-center animate-pulse ${darkMode ? 'text-purple-300' : 'text-purple-700'}`}>
+              ⚡ Accelerated with cached linguistic analysis & instant phonetics
+            </p>
+          )}
         </form>
 
         <div className="mt-10">

@@ -2,5 +2,7 @@
   "name": "ZaoLingo",
   "description": "Extracts Chinese articles from a Zaobao URL, translates to English, and displays the text with Hanyu Pinyin in a custom Canvas-based layout.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
