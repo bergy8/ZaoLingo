@@ -178,6 +178,44 @@ Instructions:
     }
   });
 
+  app.get('/api/latest-articles', async (req, res) => {
+    try {
+      const response = await fetch('https://www.zaobao.com.sg/news/singapore', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch latest articles: HTTP ${response.status}`);
+      }
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      const articles: { title: string, href: string }[] = [];
+      const seen = new Set();
+
+      $('a').each((_, el) => {
+        let href = $(el).attr('href');
+        let title = $(el).text().trim();
+
+        if (href && href.includes('/story') && title.length > 5) {
+          if (!href.startsWith('http')) {
+            href = `https://www.zaobao.com.sg${href}`;
+          }
+          if (!seen.has(href)) {
+            seen.add(href);
+            articles.push({ title, href });
+          }
+        }
+      });
+
+      res.json(articles.slice(0, 5)); // Return top 5 recent articles
+    } catch (error: any) {
+      console.error('Latest articles error:', error);
+      res.status(500).json({ error: 'Failed to fetch latest articles.' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

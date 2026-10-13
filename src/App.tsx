@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, MouseEvent } from 'react';
-import { Loader2, ArrowRight, Sun, Moon, ZoomIn, ZoomOut } from 'lucide-react';
+import { Loader2, ArrowRight, Sun, Moon, ZoomIn, ZoomOut, Type } from 'lucide-react';
 
 type Word = { z: string; p: string };
 type Sentence = {
@@ -21,10 +21,38 @@ export default function App() {
   
   const [darkMode, setDarkMode] = useState(true);
   const [fontSizeScale, setFontSizeScale] = useState(0.6);
+  const [showPinyin, setShowPinyin] = useState(true);
 
-  const handleExtract = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url) return;
+  const [recentArticles, setRecentArticles] = useState<{title: string, href: string}[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+
+  useEffect(() => {
+    async function fetchRecent() {
+      setLoadingRecent(true);
+      try {
+        const res = await fetch('/api/latest-articles');
+        if (res.ok) {
+          const data = await res.json();
+          setRecentArticles(data);
+        }
+      } catch (err) {
+        console.error("Failed to load recent articles", err);
+      } finally {
+        setLoadingRecent(false);
+      }
+    }
+    fetchRecent();
+  }, []);
+
+  const handleExtract = async (e: React.FormEvent | string) => {
+    if (typeof e !== 'string') {
+      e.preventDefault();
+    }
+    
+    const targetUrl = typeof e === 'string' ? e : url;
+    if (!targetUrl) return;
+    
+    setUrl(targetUrl);
     setError('');
     setLoading(true);
 
@@ -32,7 +60,7 @@ export default function App() {
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: targetUrl }),
       });
       const data = await res.json();
 
@@ -55,6 +83,8 @@ export default function App() {
         setDarkMode={setDarkMode}
         fontSizeScale={fontSizeScale}
         setFontSizeScale={setFontSizeScale}
+        showPinyin={showPinyin}
+        setShowPinyin={setShowPinyin}
       />
     );
   }
@@ -115,6 +145,36 @@ export default function App() {
             )}
           </button>
         </form>
+
+        <div className="mt-10">
+          <h3 className={`text-sm font-semibold mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+            Or choose a recent Singapore news article:
+          </h3>
+          {loadingRecent ? (
+            <div className={`flex items-center justify-center py-4 ${darkMode ? 'text-purple-400' : 'text-purple-600'}`}>
+              <Loader2 className="w-5 h-5 animate-spin" />
+            </div>
+          ) : recentArticles.length > 0 ? (
+            <ul className="space-y-2">
+              {recentArticles.map((art, i) => (
+                <li key={i}>
+                  <button
+                    onClick={() => handleExtract(art.href)}
+                    className={`w-full text-left text-sm py-2 px-3 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? 'border-gray-700 bg-gray-800/50 hover:bg-gray-700 hover:border-purple-500/50 text-gray-200' 
+                        : 'border-gray-200 bg-gray-50 hover:bg-purple-50 hover:border-purple-200 text-gray-800'
+                    }`}
+                  >
+                    {art.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={`text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>No recent articles found.</p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -145,7 +205,9 @@ function ArticleCanvas({
   darkMode,
   setDarkMode,
   fontSizeScale,
-  setFontSizeScale
+  setFontSizeScale,
+  showPinyin,
+  setShowPinyin
 }: { 
   article: ArticleData; 
   onReset: () => void;
@@ -153,6 +215,8 @@ function ArticleCanvas({
   setDarkMode: (v: boolean) => void;
   fontSizeScale: number;
   setFontSizeScale: (v: number | ((prev: number) => number)) => void;
+  showPinyin: boolean;
+  setShowPinyin: (v: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -322,9 +386,11 @@ function ArticleCanvas({
         const currentZhSize = s.isTitle ? Math.floor(38 * fontSizeScale) : zhFontSize;
         const currentPySize = s.isTitle ? Math.floor(18 * fontSizeScale) : pyFontSize;
 
-        ctx.font = `${currentPySize}px 'Helvetica Neue', Arial, sans-serif`;
-        ctx.fillStyle = darkMode ? '#D8B4FE' : '#7E22CE'; // Purple for pinyin
-        ctx.fillText(w.p || '', w.x + pyOffset, w.y - currentZhSize - 8);
+        if (showPinyin) {
+          ctx.font = `${currentPySize}px 'Helvetica Neue', Arial, sans-serif`;
+          ctx.fillStyle = darkMode ? '#D8B4FE' : '#7E22CE'; // Purple for pinyin
+          ctx.fillText(w.p || '', w.x + pyOffset, w.y - currentZhSize - 8);
+        }
 
         ctx.font = `${currentZhSize}px "PingFang SC", "Microsoft YaHei", sans-serif`;
         ctx.fillStyle = isHovered 
@@ -338,7 +404,7 @@ function ArticleCanvas({
       setActiveTranslation(hoveredLayout.e);
     }
 
-  }, [layout, mousePos, darkMode, fontSizeScale]);
+  }, [layout, mousePos, darkMode, fontSizeScale, showPinyin]);
 
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -423,7 +489,16 @@ function ArticleCanvas({
 
       {/* Persistent Translation Box at Bottom */}
       <div className={`flex-none h-48 md:h-56 border-t flex flex-col p-6 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] transition-colors z-10 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-        <h3 className={`text-xs uppercase font-bold mb-2 tracking-wider ${darkMode ? 'text-purple-400' : 'text-purple-700'}`}>English Translation</h3>
+        <div className="flex justify-between items-center mb-2">
+          <h3 className={`text-xs uppercase font-bold tracking-wider ${darkMode ? 'text-purple-400' : 'text-purple-700'}`}>English Translation</h3>
+          <button 
+            onClick={() => setShowPinyin(!showPinyin)}
+            className={`p-2 w-8 h-8 rounded-lg flex items-center justify-center transition-all ${!showPinyin ? (darkMode ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200') : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+            title="Toggle Pinyin"
+          >
+            <span className="text-sm font-bold font-sans">拼</span>
+          </button>
+        </div>
         <div className="flex-1 overflow-y-auto">
           {activeTranslation ? (
             <p className={`text-sm leading-relaxed ${darkMode ? 'text-gray-200' : 'text-gray-800'} transition-opacity duration-200`}>
