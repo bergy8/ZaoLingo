@@ -59,13 +59,16 @@ export default function App() {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
             setRecentArticles(data);
+            return;
           }
         }
       } catch (err) {
-        console.error("Failed to load recent articles", err);
+        console.warn("Failed to load recent articles", err);
       } finally {
         setLoadingRecent(false);
       }
+      // Guarantee fallback articles are always available
+      setRecentArticles((prev) => (prev.length > 0 ? prev : DEFAULT_RECENT_ARTICLES));
     }
     fetchRecent();
   }, []);
@@ -78,7 +81,7 @@ export default function App() {
     }
     
     const targetUrl = typeof e === 'string' ? e : url;
-    if (!targetUrl) return;
+    if (!targetUrl || !targetUrl.trim()) return;
     
     setUrl(targetUrl);
     setError('');
@@ -97,9 +100,8 @@ export default function App() {
     } catch (e) {}
 
     setLoading(true);
-    setLoadingStep('Fetching article from Zaobao...');
+    setLoadingStep('Fetching article...');
 
-    // Progress updates to give clear feedback during processing
     const stepTimer1 = setTimeout(() => {
       setLoadingStep('Segmenting Chinese words & translating...');
     }, 1200);
@@ -111,21 +113,22 @@ export default function App() {
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl }),
+        body: JSON.stringify({ url: targetUrl.trim() }),
       });
 
-      const contentType = res.headers.get('content-type') || '';
+      const responseText = await res.text();
       let data: any;
 
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        throw new Error(
-          res.status === 404
-            ? "API route '/api/extract' not found (404). Please ensure serverless functions are deployed."
-            : `Server returned non-JSON response (${res.status}): ${text.slice(0, 120)}`
-        );
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        if (res.status === 404) {
+          throw new Error("API route '/api/extract' was not found (404). If deploying on Vercel, ensure the Serverless Function at api/extract.ts is deployed.");
+        } else if (res.status === 504) {
+          throw new Error("Request timed out (504). Please try a shorter article or paste the text directly.");
+        } else {
+          throw new Error(`Server returned status ${res.status}: ${responseText.slice(0, 160)}`);
+        }
       }
 
       if (!res.ok) {
@@ -183,13 +186,13 @@ export default function App() {
         <form onSubmit={handleExtract} className="space-y-4">
           <div>
             <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`} htmlFor="url">
-              Article URL
+              Article URL or Chinese Text
             </label>
             <div className={`flex items-center rounded-lg px-3 py-2 border transition-all ${darkMode ? 'bg-gray-900 border-gray-600 focus-within:ring-purple-500' : 'bg-gray-100 border-gray-200 focus-within:ring-purple-500'} focus-within:ring-2`}>
               <input
                 id="url"
-                type="url"
-                placeholder="Paste article link here"
+                type="text"
+                placeholder="Paste Zaobao link or Chinese text here"
                 className={`w-full bg-transparent outline-none text-sm ${darkMode ? 'text-white placeholder-gray-500' : 'text-gray-800'}`}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
@@ -198,7 +201,15 @@ export default function App() {
             </div>
           </div>
 
-          {error && <div className={`text-purple-600 text-sm p-3 rounded-lg border ${darkMode ? 'bg-purple-900/30 border-purple-800/50' : 'bg-purple-50 border-purple-100'}`}>{error}</div>}
+          {error && (
+            <div className={`text-sm p-3 rounded-lg border leading-relaxed ${
+              darkMode 
+                ? 'bg-rose-950/40 border-rose-800/80 text-rose-300' 
+                : 'bg-rose-50 border-rose-200 text-rose-700'
+            }`}>
+              {error}
+            </div>
+          )}
 
           <button
             type="submit"

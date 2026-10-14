@@ -24,28 +24,49 @@ const FALLBACK_ARTICLES = [
   },
 ];
 
-export default async function handler(req: any, res: any) {
-  // Set CORS headers
+function sendJson(res: any, status: number, data: any) {
+  if (res.headersSent) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+  if (typeof res.status === 'function' && typeof res.json === 'function') {
+    return res.status(status).json(data);
+  }
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.end(JSON.stringify(data));
+}
+
+export default async function handler(req: any, res: any) {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (typeof res.status === 'function' && typeof res.end === 'function') {
+      return res.status(200).end();
+    }
+    res.statusCode = 200;
+    return res.end();
   }
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout for fast fallback
+
     const response = await fetch('https://www.zaobao.com.sg/news/singapore', {
+      signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
-    });
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!response.ok) {
       console.warn(`Zaobao fetch returned HTTP ${response.status}, using fallback articles`);
-      return res.status(200).json(FALLBACK_ARTICLES);
+      return sendJson(res, 200, FALLBACK_ARTICLES);
     }
 
     const html = await response.text();
@@ -70,14 +91,12 @@ export default async function handler(req: any, res: any) {
     });
 
     if (articles.length === 0) {
-      console.warn('No articles matched selector, using fallback articles');
-      return res.status(200).json(FALLBACK_ARTICLES);
+      return sendJson(res, 200, FALLBACK_ARTICLES);
     }
 
-    res.status(200).json(articles.slice(0, 5));
+    return sendJson(res, 200, articles.slice(0, 5));
   } catch (error: any) {
-    console.error('Latest articles fetch error:', error);
-    // Return fallback articles so frontend always has articles to show
-    res.status(200).json(FALLBACK_ARTICLES);
+    console.warn('Latest articles fetch error, using fallback articles:', error?.message);
+    return sendJson(res, 200, FALLBACK_ARTICLES);
   }
 }
